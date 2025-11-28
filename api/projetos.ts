@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+// Force rebuild
 import db from '../lib/db';
 import { Projeto } from '../types';
 
