@@ -1,4 +1,4 @@
-import { Graduate, Docente, Projeto, Turma, AlunoRegular, AlunoEspecial, Periodico, Conferencia } from '../types';
+import { Graduate, Docente, Projeto, Turma, AlunoRegular, AlunoEspecial, Periodico, Conferencia } from '../types.js';
 
 // In-memory storage
 // Note: This data will be reset when the serverless function container is recycled.

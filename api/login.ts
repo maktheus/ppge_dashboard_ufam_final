@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { authenticator } from 'otplib';
-import { ADMIN_OTP_SECRET } from '../lib/constants';
+import { ADMIN_OTP_SECRET } from '../lib/constants.js';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
