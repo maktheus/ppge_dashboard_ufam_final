@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import db from './_db';
+import db from '../lib/db';
 import { AlunoEspecial } from '../types';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
