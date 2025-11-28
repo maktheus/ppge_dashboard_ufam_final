@@ -3,7 +3,7 @@ import { authenticator } from 'otplib';
 import * as QRCode from 'qrcode';
 import * as nodemailer from 'nodemailer';
 import * as dotenv from 'dotenv';
-import { ADMIN_OTP_SECRET } from '../constants.ts';
+import { ADMIN_OTP_SECRET } from '../constants';
 
 dotenv.config({ path: '.env.local' });
 

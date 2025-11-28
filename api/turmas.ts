@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import db from './_db.ts';
+import db from './_db';
 import { Turma } from '../types';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
