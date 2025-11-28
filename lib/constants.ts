@@ -1,5 +1,5 @@
 
-import { Graduate, Course, Status, User } from './types.ts';
+import { Graduate, Course, Status, User } from '../types.ts';
 
 export const MOCK_GRADUATES: Graduate[] = [
   {
