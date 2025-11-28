@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { User } from '../types';
-import { MOCK_USERS } from '../constants';
+import { MOCK_USERS } from '../lib/constants';
 
 const AdminPanel: React.FC = () => {
     const [users, setUsers] = useState<User[]>(MOCK_USERS);
@@ -9,7 +9,7 @@ const AdminPanel: React.FC = () => {
     const [editingUser, setEditingUser] = useState<User | null>(null);
 
     const handleSaveUser = (user: User) => {
-        if(users.find(u => u.id === user.id)) {
+        if (users.find(u => u.id === user.id)) {
             setUsers(users.map(u => u.id === user.id ? user : u));
         } else {
             setUsers([...users, { ...user, id: `u${users.length + 1}` }]);
@@ -17,7 +17,7 @@ const AdminPanel: React.FC = () => {
         setEditingUser(null);
         setIsAdding(false);
     }
-    
+
     const handleDeleteUser = (id: string) => {
         setUsers(users.filter(u => u.id !== id));
     }
@@ -29,7 +29,7 @@ const AdminPanel: React.FC = () => {
                     <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">Gerenciamento de Usuários</h3>
                     <button onClick={() => setIsAdding(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Adicionar Usuário</button>
                 </div>
-                
+
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                         <thead className="bg-gray-50 dark:bg-gray-700">
@@ -56,7 +56,7 @@ const AdminPanel: React.FC = () => {
                     </table>
                 </div>
             </div>
-            
+
             {(isAdding || editingUser) && <UserForm user={editingUser} onSave={handleSaveUser} onClose={() => { setIsAdding(false); setEditingUser(null); }} />}
         </div>
     );

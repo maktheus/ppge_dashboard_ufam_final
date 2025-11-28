@@ -10,7 +10,7 @@ import AlunoRegularDashboard from './components/AlunoRegularDashboard';
 import PublicacoesDashboard from './components/PublicacoesDashboard';
 import DocentesDashboard from './components/DocentesDashboard';
 import AlunoEspecialDashboard from './components/AlunoEspecialDashboard';
-import { MOCK_USERS } from './constants';
+import { MOCK_GRADUATES, MOCK_USERS } from './lib/constants';
 import { api } from './services/api';
 import LoginModal from './components/LoginModal';
 

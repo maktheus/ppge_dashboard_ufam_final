@@ -10,7 +10,7 @@ import AcademicCapIcon from './icons/AcademicCapIcon';
 import UserIcon from './icons/UserIcon';
 import UserPlusIcon from './icons/UserPlusIcon';
 import { User } from '../types';
-import { MOCK_USERS } from '../constants';
+import { PT_BR_MONTHS } from '../lib/constants';
 
 type View = 'dashboard' | 'turmas' | 'alunoRegular' | 'alunoEspecial' | 'docentes' | 'publicacoes' | 'dataManagement' | 'admin';
 
