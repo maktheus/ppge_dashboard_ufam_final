@@ -395,12 +395,7 @@ const App: React.FC = () => {
         throw new Error("Backup data is not a valid object.");
       }
 
-      // This is tricky with API. We should probably clear existing data and then create new.
-      // Or just append? The original logic was set state, which replaces.
-      // But with API, we need to persist.
-      // For now, let's just append/create, but ideally we'd have a 'reset' endpoint.
-      // Given the complexity and user request for simple in-memory, let's just create.
-
+      // Append backup data into Firebase. To replace existing data, use the "Limpar dados" option before restaurar.
       if (Array.isArray(data.graduates)) await api.graduates.createMany(data.graduates);
       if (Array.isArray(data.docentes)) await api.docentes.createMany(data.docentes);
       if (Array.isArray(data.projetos)) await api.projetos.createMany(data.projetos);
@@ -448,12 +443,32 @@ const App: React.FC = () => {
   }, []);
 
   const handleClearAllData = useCallback(async () => {
-    // This is hard without a clear endpoint.
-    // We would need to delete one by one or add a clear endpoint.
-    // For now, let's just alert that this feature is limited in serverless mode without a specific endpoint.
-    // Or we can implement a clear endpoint.
-    // Let's assume we can't easily clear all for now without iterating.
-    alert('Limpeza de dados não implementada totalmente para o backend serverless neste momento. Reinicie o servidor para limpar (já que é em memória).');
+    try {
+      await Promise.all([
+        api.graduates.clear(),
+        api.docentes.clear(),
+        api.projetos.clear(),
+        api.turmas.clear(),
+        api.alunosRegulares.clear(),
+        api.alunosEspeciais.clear(),
+        api.periodicos.clear(),
+        api.conferencias.clear()
+      ]);
+
+      setGraduates([]);
+      setDocentes([]);
+      setProjetos([]);
+      setTurmas([]);
+      setAlunosRegulares([]);
+      setAlunosEspeciais([]);
+      setPeriodicos([]);
+      setConferencias([]);
+
+      alert('Todos os dados foram removidos do Firebase.');
+    } catch (error) {
+      console.error("Falha ao limpar dados:", error);
+      alert('Erro ao limpar dados. Verifique o console.');
+    }
   }, []);
 
   const handleLoginSuccess = useCallback(() => {

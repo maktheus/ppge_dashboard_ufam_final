@@ -1,76 +1,134 @@
+import { collection, deleteDoc, doc, getDocs, setDoc, writeBatch } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { Graduate, Docente, Projeto, Turma, AlunoRegular, AlunoEspecial, Periodico, Conferencia } from '../types';
 
-const API_BASE_URL = '/api';
+type WithId = { id: string };
 
-async function request<T>(endpoint: string, method: string = 'GET', body?: any): Promise<T> {
-    const headers = { 'Content-Type': 'application/json' };
-    const config: RequestInit = { method, headers };
-    if (body) {
-        config.body = JSON.stringify(body);
+const COLLECTIONS = {
+    graduates: 'graduates',
+    docentes: 'docentes',
+    projetos: 'projetos',
+    turmas: 'turmas',
+    alunosRegulares: 'alunosRegulares',
+    alunosEspeciais: 'alunosEspeciais',
+    periodicos: 'periodicos',
+    conferencias: 'conferencias',
+} as const;
+
+const BATCH_LIMIT = 500;
+
+const listCollection = async <T extends WithId>(collectionName: string): Promise<T[]> => {
+    const snapshot = await getDocs(collection(db, collectionName));
+    return snapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as T;
+        return { ...data, id: data.id ?? docSnap.id };
+    });
+};
+
+const createItem = async <T extends WithId>(collectionName: string, data: T): Promise<T> => {
+    await setDoc(doc(db, collectionName, data.id), data);
+    return data;
+};
+
+const createManyItems = async <T extends WithId>(collectionName: string, data: T[]): Promise<T[]> => {
+    if (!data.length) return [];
+
+    for (let i = 0; i < data.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        data.slice(i, i + BATCH_LIMIT).forEach((item) => {
+            batch.set(doc(db, collectionName, item.id), item);
+        });
+        await batch.commit();
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
-    if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText}`);
+    return data;
+};
+
+const updateItem = async <T extends WithId>(collectionName: string, data: T): Promise<T> => {
+    await setDoc(doc(db, collectionName, data.id), data, { merge: true });
+    return data;
+};
+
+const deleteItem = async (collectionName: string, id: string) => {
+    await deleteDoc(doc(db, collectionName, id));
+    return { message: `${collectionName} item deleted` };
+};
+
+const clearCollection = async (collectionName: string) => {
+    const snapshot = await getDocs(collection(db, collectionName));
+    if (snapshot.empty) return;
+
+    const docs = snapshot.docs;
+    for (let i = 0; i < docs.length; i += BATCH_LIMIT) {
+        const batch = writeBatch(db);
+        docs.slice(i, i + BATCH_LIMIT).forEach((docSnap) => batch.delete(docSnap.ref));
+        await batch.commit();
     }
-    return response.json();
-}
+};
 
 export const api = {
     graduates: {
-        list: () => request<Graduate[]>('/graduates'),
-        create: (data: Graduate) => request<Graduate>('/graduates', 'POST', data),
-        createMany: (data: Graduate[]) => request<Graduate[]>('/graduates', 'POST', data),
-        update: (data: Graduate) => request<Graduate>('/graduates', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/graduates?id=${id}`, 'DELETE'),
+        list: () => listCollection<Graduate>(COLLECTIONS.graduates),
+        create: (data: Graduate) => createItem<Graduate>(COLLECTIONS.graduates, data),
+        createMany: (data: Graduate[]) => createManyItems<Graduate>(COLLECTIONS.graduates, data),
+        update: (data: Graduate) => updateItem<Graduate>(COLLECTIONS.graduates, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.graduates, id),
+        clear: () => clearCollection(COLLECTIONS.graduates),
     },
     docentes: {
-        list: () => request<Docente[]>('/docentes'),
-        create: (data: Docente) => request<Docente>('/docentes', 'POST', data),
-        createMany: (data: Docente[]) => request<Docente[]>('/docentes', 'POST', data),
-        update: (data: Docente) => request<Docente>('/docentes', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/docentes?id=${id}`, 'DELETE'),
+        list: () => listCollection<Docente>(COLLECTIONS.docentes),
+        create: (data: Docente) => createItem<Docente>(COLLECTIONS.docentes, data),
+        createMany: (data: Docente[]) => createManyItems<Docente>(COLLECTIONS.docentes, data),
+        update: (data: Docente) => updateItem<Docente>(COLLECTIONS.docentes, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.docentes, id),
+        clear: () => clearCollection(COLLECTIONS.docentes),
     },
     projetos: {
-        list: () => request<Projeto[]>('/projetos'),
-        create: (data: Projeto) => request<Projeto>('/projetos', 'POST', data),
-        createMany: (data: Projeto[]) => request<Projeto[]>('/projetos', 'POST', data),
-        update: (data: Projeto) => request<Projeto>('/projetos', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/projetos?id=${id}`, 'DELETE'),
+        list: () => listCollection<Projeto>(COLLECTIONS.projetos),
+        create: (data: Projeto) => createItem<Projeto>(COLLECTIONS.projetos, data),
+        createMany: (data: Projeto[]) => createManyItems<Projeto>(COLLECTIONS.projetos, data),
+        update: (data: Projeto) => updateItem<Projeto>(COLLECTIONS.projetos, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.projetos, id),
+        clear: () => clearCollection(COLLECTIONS.projetos),
     },
     turmas: {
-        list: () => request<Turma[]>('/turmas'),
-        create: (data: Turma) => request<Turma>('/turmas', 'POST', data),
-        createMany: (data: Turma[]) => request<Turma[]>('/turmas', 'POST', data),
-        update: (data: Turma) => request<Turma>('/turmas', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/turmas?id=${id}`, 'DELETE'),
+        list: () => listCollection<Turma>(COLLECTIONS.turmas),
+        create: (data: Turma) => createItem<Turma>(COLLECTIONS.turmas, data),
+        createMany: (data: Turma[]) => createManyItems<Turma>(COLLECTIONS.turmas, data),
+        update: (data: Turma) => updateItem<Turma>(COLLECTIONS.turmas, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.turmas, id),
+        clear: () => clearCollection(COLLECTIONS.turmas),
     },
     alunosRegulares: {
-        list: () => request<AlunoRegular[]>('/alunos-regulares'),
-        create: (data: AlunoRegular) => request<AlunoRegular>('/alunos-regulares', 'POST', data),
-        createMany: (data: AlunoRegular[]) => request<AlunoRegular[]>('/alunos-regulares', 'POST', data),
-        update: (data: AlunoRegular) => request<AlunoRegular>('/alunos-regulares', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/alunos-regulares?id=${id}`, 'DELETE'),
+        list: () => listCollection<AlunoRegular>(COLLECTIONS.alunosRegulares),
+        create: (data: AlunoRegular) => createItem<AlunoRegular>(COLLECTIONS.alunosRegulares, data),
+        createMany: (data: AlunoRegular[]) => createManyItems<AlunoRegular>(COLLECTIONS.alunosRegulares, data),
+        update: (data: AlunoRegular) => updateItem<AlunoRegular>(COLLECTIONS.alunosRegulares, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.alunosRegulares, id),
+        clear: () => clearCollection(COLLECTIONS.alunosRegulares),
     },
     alunosEspeciais: {
-        list: () => request<AlunoEspecial[]>('/alunos-especiais'),
-        create: (data: AlunoEspecial) => request<AlunoEspecial>('/alunos-especiais', 'POST', data),
-        createMany: (data: AlunoEspecial[]) => request<AlunoEspecial[]>('/alunos-especiais', 'POST', data),
-        update: (data: AlunoEspecial) => request<AlunoEspecial>('/alunos-especiais', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/alunos-especiais?id=${id}`, 'DELETE'),
+        list: () => listCollection<AlunoEspecial>(COLLECTIONS.alunosEspeciais),
+        create: (data: AlunoEspecial) => createItem<AlunoEspecial>(COLLECTIONS.alunosEspeciais, data),
+        createMany: (data: AlunoEspecial[]) => createManyItems<AlunoEspecial>(COLLECTIONS.alunosEspeciais, data),
+        update: (data: AlunoEspecial) => updateItem<AlunoEspecial>(COLLECTIONS.alunosEspeciais, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.alunosEspeciais, id),
+        clear: () => clearCollection(COLLECTIONS.alunosEspeciais),
     },
     periodicos: {
-        list: () => request<Periodico[]>('/periodicos'),
-        create: (data: Periodico) => request<Periodico>('/periodicos', 'POST', data),
-        createMany: (data: Periodico[]) => request<Periodico[]>('/periodicos', 'POST', data),
-        update: (data: Periodico) => request<Periodico>('/periodicos', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/periodicos?id=${id}`, 'DELETE'),
+        list: () => listCollection<Periodico>(COLLECTIONS.periodicos),
+        create: (data: Periodico) => createItem<Periodico>(COLLECTIONS.periodicos, data),
+        createMany: (data: Periodico[]) => createManyItems<Periodico>(COLLECTIONS.periodicos, data),
+        update: (data: Periodico) => updateItem<Periodico>(COLLECTIONS.periodicos, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.periodicos, id),
+        clear: () => clearCollection(COLLECTIONS.periodicos),
     },
     conferencias: {
-        list: () => request<Conferencia[]>('/conferencias'),
-        create: (data: Conferencia) => request<Conferencia>('/conferencias', 'POST', data),
-        createMany: (data: Conferencia[]) => request<Conferencia[]>('/conferencias', 'POST', data),
-        update: (data: Conferencia) => request<Conferencia>('/conferencias', 'PUT', data),
-        delete: (id: string) => request<{ message: string }>(`/conferencias?id=${id}`, 'DELETE'),
+        list: () => listCollection<Conferencia>(COLLECTIONS.conferencias),
+        create: (data: Conferencia) => createItem<Conferencia>(COLLECTIONS.conferencias, data),
+        createMany: (data: Conferencia[]) => createManyItems<Conferencia>(COLLECTIONS.conferencias, data),
+        update: (data: Conferencia) => updateItem<Conferencia>(COLLECTIONS.conferencias, data),
+        delete: (id: string) => deleteItem(COLLECTIONS.conferencias, id),
+        clear: () => clearCollection(COLLECTIONS.conferencias),
     },
 };
