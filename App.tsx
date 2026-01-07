@@ -123,7 +123,13 @@ const App: React.FC = () => {
 
   const handleImportGraduates = useCallback(async (newGraduates: Graduate[]) => {
     try {
-      const createdGraduates = await api.graduates.createMany(newGraduates);
+      const sanitizedGraduates = newGraduates.map(g => ({
+        ...g,
+        trabalhando: g.trabalhando ?? "",
+        anoDefesa: g.anoDefesa ?? "",
+      }));
+      const cleanGraduates = JSON.parse(JSON.stringify(sanitizedGraduates));
+      const createdGraduates = await api.graduates.createMany(cleanGraduates);
       setGraduates(prev => [...prev, ...createdGraduates]);
       setActiveView('dashboard');
     } catch (error) {
@@ -161,7 +167,13 @@ const App: React.FC = () => {
 
   const handleImportDocentes = useCallback(async (newDocentes: Docente[]) => {
     try {
-      const createdDocentes = await api.docentes.createMany(newDocentes);
+      const sanitizedDocentes = newDocentes.map(d => ({
+        ...d,
+        email: d.email ?? "",
+        fone: d.fone ?? "",
+      }));
+      const cleanDocentes = JSON.parse(JSON.stringify(sanitizedDocentes));
+      const createdDocentes = await api.docentes.createMany(cleanDocentes);
       setDocentes(prev => [...prev, ...createdDocentes]);
     } catch (error) {
       console.error("Failed to import docentes:", error);
@@ -198,7 +210,8 @@ const App: React.FC = () => {
 
   const handleImportProjetos = useCallback(async (newProjetos: Projeto[]) => {
     try {
-      const createdProjetos = await api.projetos.createMany(newProjetos);
+      const cleanProjetos = JSON.parse(JSON.stringify(newProjetos));
+      const createdProjetos = await api.projetos.createMany(cleanProjetos);
       setProjetos(prev => [...prev, ...createdProjetos]);
     } catch (error) {
       console.error("Failed to import projetos:", error);
@@ -235,7 +248,8 @@ const App: React.FC = () => {
 
   const handleImportTurmas = useCallback(async (newTurmas: Turma[]) => {
     try {
-      const createdTurmas = await api.turmas.createMany(newTurmas);
+      const cleanTurmas = JSON.parse(JSON.stringify(newTurmas));
+      const createdTurmas = await api.turmas.createMany(cleanTurmas);
       setTurmas(prev => [...prev, ...createdTurmas]);
     } catch (error) {
       console.error("Failed to import turmas:", error);
@@ -272,7 +286,18 @@ const App: React.FC = () => {
 
   const handleImportAlunosRegulares = useCallback(async (newAlunos: AlunoRegular[]) => {
     try {
-      const createdAlunos = await api.alunosRegulares.createMany(newAlunos);
+      const sanitizedAlunos = newAlunos.map(a => ({
+        ...a,
+        coOrientador: a.coOrientador ?? "",
+        qualificacao: a.qualificacao ?? "",
+        defesa: a.defesa ?? "",
+        bolsista: a.bolsista ?? "",
+        email: a.email ?? "",
+        fone: a.fone ?? "",
+        informacoesExtras: a.informacoesExtras ?? "",
+      }));
+      const cleanAlunos = JSON.parse(JSON.stringify(sanitizedAlunos));
+      const createdAlunos = await api.alunosRegulares.createMany(cleanAlunos);
       setAlunosRegulares(prev => [...prev, ...createdAlunos]);
     } catch (error) {
       console.error("Failed to import alunos regulares:", error);
@@ -309,7 +334,13 @@ const App: React.FC = () => {
 
   const handleImportAlunosEspeciais = useCallback(async (newAlunos: AlunoEspecial[]) => {
     try {
-      const createdAlunos = await api.alunosEspeciais.createMany(newAlunos);
+      const sanitizedAlunos = newAlunos.map(a => ({
+        ...a,
+        email: a.email ?? "",
+        fone: a.fone ?? "",
+      }));
+      const cleanAlunos = JSON.parse(JSON.stringify(sanitizedAlunos));
+      const createdAlunos = await api.alunosEspeciais.createMany(cleanAlunos);
       setAlunosEspeciais(prev => [...prev, ...createdAlunos]);
     } catch (error) {
       console.error("Failed to import alunos especiais:", error);
@@ -343,7 +374,14 @@ const App: React.FC = () => {
   }, []);
   const handleImportPeriodicos = useCallback(async (newPeriodicos: Periodico[]) => {
     try {
-      const createdPeriodicos = await api.periodicos.createMany(newPeriodicos);
+      // Periodico interface has explicit types, but categoria comes from Excel row which might be undefined.
+      // And explicit booleans are safe.
+      const sanitizedPeriodicos = newPeriodicos.map(p => ({
+        ...p,
+        categoria: p.categoria ?? "",
+      }));
+      const cleanPeriodicos = JSON.parse(JSON.stringify(sanitizedPeriodicos));
+      const createdPeriodicos = await api.periodicos.createMany(cleanPeriodicos);
       setPeriodicos(prev => [...prev, ...createdPeriodicos]);
     } catch (error) {
       console.error("Failed to import periodicos:", error);
@@ -377,7 +415,12 @@ const App: React.FC = () => {
   }, []);
   const handleImportConferencias = useCallback(async (newConferencias: Conferencia[]) => {
     try {
-      const createdConferencias = await api.conferencias.createMany(newConferencias);
+      const sanitizedConferencias = newConferencias.map(c => ({
+        ...c,
+        categoria: c.categoria ?? "",
+      }));
+      const cleanConferencias = JSON.parse(JSON.stringify(sanitizedConferencias));
+      const createdConferencias = await api.conferencias.createMany(cleanConferencias);
       setConferencias(prev => [...prev, ...createdConferencias]);
     } catch (error) {
       console.error("Failed to import conferencias:", error);
