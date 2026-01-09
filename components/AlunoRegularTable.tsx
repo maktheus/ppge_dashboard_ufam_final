@@ -3,6 +3,7 @@ import { AlunoRegular, Course } from '../types';
 import AlunoRegularForm from './AlunoRegularForm';
 import { generateAlunoRegularPDF } from './AlunoRegularReport';
 import EnvelopeIcon from './icons/EnvelopeIcon';
+import { parseBrDate, compareValues } from '../lib/sortUtils';
 
 
 declare const XLSX: any;
@@ -16,37 +17,26 @@ interface AlunoRegularTableProps {
   userRole: 'Administrador' | 'Visualizador';
 }
 
-const parseDate = (dateString?: string): Date | null => {
-    if (!dateString) return null;
-    const parts = dateString.split('/');
-    if (parts.length === 3) {
-        // month is 0-indexed in JS Date
-        const date = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-        if (!isNaN(date.getTime())) {
-            return date;
-        }
-    }
-    return null;
-}
+
 
 const calculateDurationInMonths = (aluno: AlunoRegular): number | null => {
   const { ingresso, situacao, defesa } = aluno;
-  
-  const ingressoDate = parseDate(ingresso);
+
+  const ingressoDate = parseBrDate(ingresso);
   if (!ingressoDate) return null;
 
   let endDate: Date | null = null;
-  
+
   if (situacao?.toLowerCase() === 'sem evasão') {
-      endDate = new Date();
+    endDate = new Date();
   } else if (situacao?.toLowerCase() === 'defendido') {
-      endDate = parseDate(defesa);
+    endDate = parseBrDate(defesa);
   } else {
-      return null;
+    return null;
   }
-  
+
   if (!endDate) return null;
-  
+
   const diffTime = Math.abs(endDate.getTime() - ingressoDate.getTime());
   const diffDays = diffTime / (1000 * 60 * 60 * 24);
   return diffDays / 30.4375; // Average days in a month
@@ -86,31 +76,19 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
     return [...data].sort((a, b) => {
       const isDateKey = ['ingresso', 'qualificacao', 'defesa'].includes(sortKey);
 
-      if (isDateKey) {
-        const dateA = parseDate(a[sortKey as 'ingresso' | 'qualificacao' | 'defesa']);
-        const dateB = parseDate(b[sortKey as 'ingresso' | 'qualificacao' | 'defesa']);
-        
-        if (!dateA && !dateB) return 0;
-        if (!dateA) return 1;
-        if (!dateB) return -1;
-        
-        const timeA = dateA.getTime();
-        const timeB = dateB.getTime();
+      const result = compareValues(
+        a[sortKey as keyof AlunoRegular], // keyof casting to ensure type safety
+        b[sortKey as keyof AlunoRegular],
+        sortOrder,
+        { date: isDateKey, ignoreAccents: true }
+      );
 
-        if (timeA < timeB) return sortOrder === 'asc' ? -1 : 1;
-        if (timeA > timeB) return sortOrder === 'asc' ? 1 : -1;
-        return 0;
+      if (result === 0 && sortKey !== 'aluno') {
+        // Secondary sort: Aluno (Name) ASC
+        return compareValues(a.aluno, b.aluno, 'asc', { ignoreAccents: true });
       }
 
-      const aValue = a[sortKey];
-      const bValue = b[sortKey];
-      
-      if (aValue === undefined || aValue === null) return 1;
-      if (bValue === undefined || bValue === null) return -1;
-      
-      if (String(aValue).localeCompare(String(bValue)) < 0) return sortOrder === 'asc' ? -1 : 1;
-      if (String(aValue).localeCompare(String(bValue)) > 0) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      return result;
     });
   }, [data, sortKey, sortOrder]);
 
@@ -133,13 +111,14 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
 
   const exportToExcel = useCallback(() => {
     const exportData = data.map(aluno => {
-        const durationMonths = calculateDurationInMonths(aluno);
-        const { proficiencia, ...rest } = aluno;
-        return {
+      const durationMonths = calculateDurationInMonths(aluno);
+      const { proficiencia, ...rest } = aluno;
+      return {
         ...rest,
         'PROFICIÊNCIA NOTA': proficiencia, // Now exports the number type directly
         'DURAÇÃO': durationMonths !== null ? `${durationMonths.toFixed(1)} meses` : '-'
-    }});
+      }
+    });
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Alunos Regulares');
@@ -148,13 +127,14 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
 
   const exportToCSV = useCallback(() => {
     const exportData = data.map(aluno => {
-        const durationMonths = calculateDurationInMonths(aluno);
-        const { proficiencia, ...rest } = aluno;
-        return {
+      const durationMonths = calculateDurationInMonths(aluno);
+      const { proficiencia, ...rest } = aluno;
+      return {
         ...rest,
         'PROFICIÊNCIA NOTA': proficiencia != null ? proficiencia.toFixed(2) : '', // Format for CSV
         'DURAÇÃO': durationMonths !== null ? `${durationMonths.toFixed(1)} meses` : '-'
-    }});
+      }
+    });
     const csv = Papa.unparse(exportData);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -164,23 +144,23 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
     link.click();
     document.body.removeChild(link);
   }, [data]);
-  
+
   const handleUpdate = (aluno: AlunoRegular) => {
     onUpdate(aluno);
     setEditingAluno(null);
   };
-  
+
   const handlePrepareEmail = useCallback(() => {
     if (!data || data.length === 0) {
-        alert("Não há alunos na lista para preparar o e-mail.");
-        return;
+      alert("Não há alunos na lista para preparar o e-mail.");
+      return;
     }
 
     const emails = data.map(aluno => aluno.email).filter(Boolean).join(', ');
     setEmailTo(emails);
 
     const subject = "Acompanhamento Alunos Regulares PPGEE";
-    
+
     const styles = `
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
@@ -190,7 +170,7 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
         tr:nth-child(even) { background-color: #f9f9f9; }
       </style>
     `;
-    
+
     const tableHeader = `
       <thead>
         <tr>
@@ -207,9 +187,9 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
     `;
 
     const tableBody = data.map(aluno => {
-        const durationMonths = calculateDurationInMonths(aluno);
-        const durationText = durationMonths !== null ? `${durationMonths.toFixed(1)} meses` : '-';
-        return `
+      const durationMonths = calculateDurationInMonths(aluno);
+      const durationText = durationMonths !== null ? `${durationMonths.toFixed(1)} meses` : '-';
+      return `
       <tr>
         <td>${aluno.aluno || 'N/A'}</td>
         <td>${aluno.orientador || 'N/A'}</td>
@@ -240,48 +220,48 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
         </body>
       </html>
     `;
-    
+
     setEmailSubject(subject);
     setEmailBody(htmlBody);
     setIsEmailModalOpen(true);
   }, [data]);
-  
+
   const handleCopyToClipboard = () => {
     try {
-        const blob = new Blob([emailBody], { type: 'text/html' });
-        const clipboardItem = new ClipboardItem({ 'text/html': blob });
-        navigator.clipboard.write([clipboardItem]).then(() => {
-            setCopySuccess('Copiado!');
-            setTimeout(() => setCopySuccess(''), 2000);
-        }, (err) => {
-            setCopySuccess('Falha ao copiar');
-            console.error('Could not copy rich text: ', err);
-            navigator.clipboard.writeText(emailBody);
-        });
+      const blob = new Blob([emailBody], { type: 'text/html' });
+      const clipboardItem = new ClipboardItem({ 'text/html': blob });
+      navigator.clipboard.write([clipboardItem]).then(() => {
+        setCopySuccess('Copiado!');
+        setTimeout(() => setCopySuccess(''), 2000);
+      }, (err) => {
+        setCopySuccess('Falha ao copiar');
+        console.error('Could not copy rich text: ', err);
+        navigator.clipboard.writeText(emailBody);
+      });
     } catch (e) {
-        navigator.clipboard.writeText(emailBody).then(() => {
-            setCopySuccess('Copiado como HTML!');
-            setTimeout(() => setCopySuccess(''), 2000);
-        });
-        console.error('ClipboardItem API not supported, copying as plain text HTML.', e);
+      navigator.clipboard.writeText(emailBody).then(() => {
+        setCopySuccess('Copiado como HTML!');
+        setTimeout(() => setCopySuccess(''), 2000);
+      });
+      console.error('ClipboardItem API not supported, copying as plain text HTML.', e);
     }
   };
 
   const handleCopyTo = () => {
     navigator.clipboard.writeText(emailTo).then(() => {
-        setCopyToSuccess('Copiado!');
-        setTimeout(() => setCopyToSuccess(''), 2000);
+      setCopyToSuccess('Copiado!');
+      setTimeout(() => setCopyToSuccess(''), 2000);
     }, (err) => {
-        setCopyToSuccess('Falha ao copiar');
-        console.error('Could not copy text: ', err);
+      setCopyToSuccess('Falha ao copiar');
+      console.error('Could not copy text: ', err);
     });
   };
 
   const handleOpenMailClient = () => {
     const mailtoLink = `mailto:${encodeURIComponent(emailTo)}?subject=${encodeURIComponent(emailSubject)}`;
     if (mailtoLink.length > 2000) {
-        alert("A lista de e-mails é muito longa para abrir diretamente no cliente de e-mail. Por favor, use o botão 'Copiar' e cole o conteúdo manualmente.");
-        return;
+      alert("A lista de e-mails é muito longa para abrir diretamente no cliente de e-mail. Por favor, use o botão 'Copiar' e cole o conteúdo manualmente.");
+      return;
     }
     window.location.href = mailtoLink;
   };
@@ -307,57 +287,57 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
 
   return (
     <>
-    <div className="w-full">
+      <div className="w-full">
         <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Lista de Alunos Regulares</h3>
-            <div className="flex flex-wrap gap-2">
-                {userRole === 'Administrador' && (
-                  <button 
-                      onClick={handlePrepareEmail} 
-                      className="inline-flex items-center gap-2 px-3 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 text-sm"
-                  >
-                      <EnvelopeIcon className="h-4 w-4" />
-                      <span>Preparar E-mail</span>
-                  </button>
-                )}
-                <button onClick={() => setIsPdfModalOpen(true)} className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm">Gerar Relatório PDF</button>
-                <button onClick={exportToCSV} className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">Exportar CSV</button>
-                <button onClick={exportToExcel} className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Exportar Excel</button>
-            </div>
+          <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">Lista de Alunos Regulares</h3>
+          <div className="flex flex-wrap gap-2">
+            {userRole === 'Administrador' && (
+              <button
+                onClick={handlePrepareEmail}
+                className="inline-flex items-center gap-2 px-3 py-1 bg-teal-600 text-white rounded-md hover:bg-teal-700 text-sm"
+              >
+                <EnvelopeIcon className="h-4 w-4" />
+                <span>Preparar E-mail</span>
+              </button>
+            )}
+            <button onClick={() => setIsPdfModalOpen(true)} className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 text-sm">Gerar Relatório PDF</button>
+            <button onClick={exportToCSV} className="px-3 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">Exportar CSV</button>
+            <button onClick={exportToExcel} className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Exportar Excel</button>
+          </div>
         </div>
-      <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              {headers.map(header => (
-                <th 
-                  key={header.key || header.label} 
-                  scope="col" 
-                  onClick={() => header.key && handleSort(header.key as keyof AlunoRegular)} 
-                  className={`px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${header.key ? 'cursor-pointer' : ''} ${header.className || ''}`}
-                >
-                  {header.label} {header.key && sortKey === header.key && (sortOrder === 'asc' ? '▲' : '▼')}
-                </th>
-              ))}
-              {userRole === 'Administrador' && (
-                <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-                  Ações
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-            {paginatedData.map(a => {
-              const durationMonths = calculateDurationInMonths(a);
-              const durationText = durationMonths !== null ? `${durationMonths.toFixed(1)} meses` : '-';
-              
-              let durationBadgeClass = '';
-              const isMestrado = a.curso === Course.MESTRADO;
-              const isDoutorado = a.curso === Course.DOUTORADO;
-              const isDesligado = a.situacao === 'Desligado';
-              const hasValidDuration = durationMonths !== null;
+        <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow">
+          <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                {headers.map(header => (
+                  <th
+                    key={header.key || header.label}
+                    scope="col"
+                    onClick={() => header.key && handleSort(header.key as keyof AlunoRegular)}
+                    className={`px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider ${header.key ? 'cursor-pointer' : ''} ${header.className || ''}`}
+                  >
+                    {header.label} {header.key && sortKey === header.key && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </th>
+                ))}
+                {userRole === 'Administrador' && (
+                  <th scope="col" className="px-3 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                    Ações
+                  </th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              {paginatedData.map(a => {
+                const durationMonths = calculateDurationInMonths(a);
+                const durationText = durationMonths !== null ? `${durationMonths.toFixed(1)} meses` : '-';
 
-              if (hasValidDuration && !isDesligado) {
+                let durationBadgeClass = '';
+                const isMestrado = a.curso === Course.MESTRADO;
+                const isDoutorado = a.curso === Course.DOUTORADO;
+                const isDesligado = a.situacao === 'Desligado';
+                const hasValidDuration = durationMonths !== null;
+
+                if (hasValidDuration && !isDesligado) {
                   const isMestradoQualPendente = isMestrado && durationMonths > 17.0 && !a.qualificacao;
                   const isMestradoDefesaPendente = isMestrado && durationMonths > 22.0;
 
@@ -367,129 +347,129 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
 
 
                   if (isMestradoQualPendente || isMestradoDefesaPendente || isDoutoradoDefesaPendente || isDoutoradoQualPendente) {
-                      durationBadgeClass = 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200';
+                    durationBadgeClass = 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200';
                   } else if (isDoutoradoQualificadoOk) {
-                       durationBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-200';
+                    durationBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-200';
                   }
                   else if (isMestrado) {
-                      durationBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-200';
+                    durationBadgeClass = 'bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-200';
                   }
-              }
+                }
 
-              return (
-                <tr key={a.id} className="hover:bg-gray-100 dark:hover:bg-gray-700">
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.matricula}</td>
-                  <td className="px-3 py-4 whitespace-normal text-xs font-medium text-gray-900 dark:text-white">{a.aluno}</td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.ingresso}</td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs">
+                return (
+                  <tr key={a.id} className="hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.matricula}</td>
+                    <td className="px-3 py-4 whitespace-normal text-xs font-medium text-gray-900 dark:text-white">{a.aluno}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.ingresso}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs">
                       <span className={`px-2 inline-flex leading-5 font-semibold rounded-full ${getStatusBadgeClass(a.situacao)}`}>
-                          {a.situacao}
+                        {a.situacao}
                       </span>
-                  </td>
-                  <td className="px-3 py-4 whitespace-normal text-xs text-gray-500 dark:text-gray-300">
-                     <div className="flex items-center gap-1">
+                    </td>
+                    <td className="px-3 py-4 whitespace-normal text-xs text-gray-500 dark:text-gray-300">
+                      <div className="flex items-center gap-1">
                         {!isDesligado && hasValidDuration && durationMonths > 6.0 && (!a.orientador || a.orientador === 'N/A') ? (
                           <span title="Orientador pendente após 6 meses" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
                         ) : null}
                         <span>{a.orientador || '-'}</span>
                       </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-normal text-xs text-gray-500 dark:text-gray-300">{a.coOrientador || '-'}</td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs">
-                    {durationBadgeClass ? (
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${durationBadgeClass}`}>
-                        {durationText}
-                      </span>
-                    ) : (
-                      <span className="text-gray-500 dark:text-gray-300">{durationText}</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
-                     <div className="flex items-center gap-1">
-                      {!isDesligado && a.proficiencia == null ? (
-                        <span title="Proficiência Nota pendente" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
-                      ) : null}
-                      <span>{a.proficiencia != null ? a.proficiencia.toFixed(2) : '-'}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
-                    <div className="flex items-center gap-1">
-                      {isMestrado && !isDesligado && hasValidDuration && durationMonths > 17.0 && !a.qualificacao ? (
-                        <span title="Qualificação de mestrado pendente e prazo se esgotando" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
-                      ) : null}
-                       {isDoutorado && !isDesligado && hasValidDuration && durationMonths > 22.0 && !a.qualificacao ? (
-                        <span title="Qualificação de doutorado pendente e prazo se esgotando" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
-                      ) : null}
-                      <span>{a.qualificacao || '-'}</span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.defesa || '-'}</td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.bolsista || '-'}</td>
-                  <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.curso}</td>
-                  {userRole === 'Administrador' && (
-                    <td className="px-3 py-4 whitespace-nowrap text-right text-xs font-medium">
-                      <button onClick={() => setEditingAluno(a)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-200 mr-3">Editar</button>
-                      <button onClick={() => onDelete(a.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200">Excluir</button>
                     </td>
-                  )}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      {/* Pagination */}
-      <div className="flex items-center justify-between py-3">
-        <div className="text-sm text-gray-700 dark:text-gray-400">
+                    <td className="px-3 py-4 whitespace-normal text-xs text-gray-500 dark:text-gray-300">{a.coOrientador || '-'}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs">
+                      {durationBadgeClass ? (
+                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${durationBadgeClass}`}>
+                          {durationText}
+                        </span>
+                      ) : (
+                        <span className="text-gray-500 dark:text-gray-300">{durationText}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                      <div className="flex items-center gap-1">
+                        {!isDesligado && a.proficiencia == null ? (
+                          <span title="Proficiência Nota pendente" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
+                        ) : null}
+                        <span>{a.proficiencia != null ? a.proficiencia.toFixed(2) : '-'}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">
+                      <div className="flex items-center gap-1">
+                        {isMestrado && !isDesligado && hasValidDuration && durationMonths > 17.0 && !a.qualificacao ? (
+                          <span title="Qualificação de mestrado pendente e prazo se esgotando" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
+                        ) : null}
+                        {isDoutorado && !isDesligado && hasValidDuration && durationMonths > 22.0 && !a.qualificacao ? (
+                          <span title="Qualificação de doutorado pendente e prazo se esgotando" className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-800/50 dark:text-yellow-200">A!</span>
+                        ) : null}
+                        <span>{a.qualificacao || '-'}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.defesa || '-'}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.bolsista || '-'}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-300">{a.curso}</td>
+                    {userRole === 'Administrador' && (
+                      <td className="px-3 py-4 whitespace-nowrap text-right text-xs font-medium">
+                        <button onClick={() => setEditingAluno(a)} className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-200 mr-3">Editar</button>
+                        <button onClick={() => onDelete(a.id)} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-200">Excluir</button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {/* Pagination */}
+        <div className="flex items-center justify-between py-3">
+          <div className="text-sm text-gray-700 dark:text-gray-400">
             Mostrando {startIndex} a {endIndex} de {totalItems} resultados
-        </div>
-        <div className="flex-1 flex justify-end">
-          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 disabled:opacity-50">Anterior</button>
-          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 disabled:opacity-50">Próximo</button>
+          </div>
+          <div className="flex-1 flex justify-end">
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 disabled:opacity-50">Anterior</button>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 disabled:opacity-50">Próximo</button>
+          </div>
         </div>
       </div>
-    </div>
-    {editingAluno && (
+      {editingAluno && (
         <AlunoRegularForm
-            aluno={editingAluno}
-            onSave={handleUpdate}
-            onClose={() => setEditingAluno(null)}
+          aluno={editingAluno}
+          onSave={handleUpdate}
+          onClose={() => setEditingAluno(null)}
         />
-    )}
-    {isPdfModalOpen && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
-          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Escolha o formato do Relatório PDF</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Selecione como os dados dos alunos regulares devem ser organizados no arquivo PDF.</p>
-          <div className="space-y-4">
-             <button
-              onClick={() => {
-                generateAlunoRegularPDF(data, filters, 'by_orientador');
-                setIsPdfModalOpen(false);
-              }}
-              className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
-            >
-              Organizado por Orientador
-            </button>
-            <button
-              onClick={() => {
-                generateAlunoRegularPDF(sortedData, filters, 'as_ui');
-                setIsPdfModalOpen(false);
-              }}
-              className="w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"
-            >
-              Como na Tabela (Ordenação Atual)
-            </button>
-          </div>
-          <div className="mt-6 text-right">
-             <button onClick={() => setIsPdfModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
-              Cancelar
-            </button>
+      )}
+      {isPdfModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-4">Escolha o formato do Relatório PDF</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">Selecione como os dados dos alunos regulares devem ser organizados no arquivo PDF.</p>
+            <div className="space-y-4">
+              <button
+                onClick={() => {
+                  generateAlunoRegularPDF(data, filters, 'by_orientador');
+                  setIsPdfModalOpen(false);
+                }}
+                className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
+              >
+                Organizado por Orientador
+              </button>
+              <button
+                onClick={() => {
+                  generateAlunoRegularPDF(sortedData, filters, 'as_ui');
+                  setIsPdfModalOpen(false);
+                }}
+                className="w-full px-4 py-3 bg-green-600 text-white font-semibold rounded-lg shadow-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75"
+              >
+                Como na Tabela (Ordenação Atual)
+              </button>
+            </div>
+            <div className="mt-6 text-right">
+              <button onClick={() => setIsPdfModalOpen(false)} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    )}
-    {isEmailModalOpen && (
+      )}
+      {isEmailModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center mb-4 flex-shrink-0">
@@ -497,12 +477,12 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
               <button onClick={() => setIsEmailModalOpen(false)} className="text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 text-2xl font-bold">&times;</button>
             </div>
             <div className="space-y-4 flex-grow overflow-y-auto pr-2">
-               <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Para</label>
                 <div className="mt-1 flex rounded-md shadow-sm">
-                  <input type="text" readOnly value={emailTo} className="flex-1 block w-full min-w-0 rounded-none rounded-l-md border-gray-300 sm:text-sm bg-gray-100 dark:bg-gray-700 dark:border-gray-600 cursor-text" placeholder="Nenhum e-mail encontrado"/>
+                  <input type="text" readOnly value={emailTo} className="flex-1 block w-full min-w-0 rounded-none rounded-l-md border-gray-300 sm:text-sm bg-gray-100 dark:bg-gray-700 dark:border-gray-600 cursor-text" placeholder="Nenhum e-mail encontrado" />
                   <button type="button" onClick={handleCopyTo} className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 bg-gray-50 text-gray-500 text-sm dark:bg-gray-600 dark:border-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-500">
-                     {copyToSuccess ? 'Copiado!' : 'Copiar'}
+                    {copyToSuccess ? 'Copiado!' : 'Copiar'}
                   </button>
                 </div>
               </div>
@@ -519,31 +499,31 @@ const AlunoRegularTable: React.FC<AlunoRegularTableProps> = ({ data, onUpdate, o
               </div>
             </div>
             <div className="flex flex-wrap justify-between items-center gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                    <strong>Atenção:</strong> O botão "Abrir..." apenas preenche destinatários e assunto. Copie e cole o corpo do e-mail acima.
-                </p>
-                <div className="flex flex-wrap justify-end items-center gap-3">
-                    {copySuccess && <span className="text-sm text-green-600 dark:text-green-400">{copySuccess}</span>}
-                    <button
-                        type="button"
-                        onClick={handleCopyToClipboard}
-                        className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:bg-gray-400"
-                        disabled={!!copySuccess}
-                    >
-                        {copySuccess ? 'Copiado!' : 'Copiar Corpo do E-mail'}
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleOpenMailClient}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                        Abrir no Cliente de E-mail
-                    </button>
-                </div>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                <strong>Atenção:</strong> O botão "Abrir..." apenas preenche destinatários e assunto. Copie e cole o corpo do e-mail acima.
+              </p>
+              <div className="flex flex-wrap justify-end items-center gap-3">
+                {copySuccess && <span className="text-sm text-green-600 dark:text-green-400">{copySuccess}</span>}
+                <button
+                  type="button"
+                  onClick={handleCopyToClipboard}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:bg-gray-400"
+                  disabled={!!copySuccess}
+                >
+                  {copySuccess ? 'Copiado!' : 'Copiar Corpo do E-mail'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenMailClient}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Abrir no Cliente de E-mail
+                </button>
+              </div>
             </div>
           </div>
         </div>
-    )}
+      )}
     </>
   );
 };

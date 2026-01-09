@@ -25,10 +25,10 @@ const DocenteTable: React.FC<DocenteTableProps> = ({ data, onUpdate, onDelete })
     return [...data].sort((a, b) => {
       const aValue = a[sortKey];
       const bValue = b[sortKey];
-      
+
       if (aValue === undefined || aValue === null) return 1;
       if (bValue === undefined || bValue === null) return -1;
-      
+
       if (aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
       return 0;
@@ -87,7 +87,7 @@ const DocenteTable: React.FC<DocenteTableProps> = ({ data, onUpdate, onDelete })
     { key: 'participouPublicacaoQuadrienio', label: 'Participou de uma publicação em periódico no quadrienio' },
     { key: 'teveOrientacaoConcluidaQuadrienio', label: 'Teve uma orientação concluida no quadrienio' },
   ];
-  
+
   const renderBoolean = (value: boolean) => (
     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${value ? 'bg-green-100 text-green-800 dark:bg-green-800/50 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-800/50 dark:text-red-200'}`}>
       {value ? 's' : 'n'}
